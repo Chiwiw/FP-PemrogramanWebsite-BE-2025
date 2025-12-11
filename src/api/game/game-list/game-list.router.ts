@@ -6,6 +6,8 @@ import { AnagramController } from './anagram/anagram.controller';
 import { PairOrNoPairController } from './pair-or-no-pair/pair-or-no-pair.controller';
 import { QuizController } from './quiz/quiz.controller';
 import { SpeedSortingController } from './speed-sorting/speed-sorting.controller';
+import { SpinTheWheelController } from './spin-the-wheel/spin-the-wheel.controller';
+import { TypeSpeedController } from './type-speed/type-speed.controller';
 
 const GameListRouter = Router();
 
@@ -13,5 +15,7 @@ GameListRouter.use('/quiz', QuizController);
 GameListRouter.use('/speed-sorting', SpeedSortingController);
 GameListRouter.use('/anagram', AnagramController);
 GameListRouter.use('/pair-or-no-pair', PairOrNoPairController);
+GameListRouter.use('/type-speed', TypeSpeedController);
+GameListRouter.use('/spin-the-wheel', SpinTheWheelController);
 
 export default GameListRouter;

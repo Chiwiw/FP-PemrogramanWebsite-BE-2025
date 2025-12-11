@@ -1,3 +1,5 @@
 export * from './pair-or-no-pair.interface';
 export * from './quiz.interface';
 export * from './speed-sorting.interface';
+export * from './spin-the-wheel.interface';
+export * from './type-speed.interface';
