@@ -1,160 +1,70 @@
-# Spin The Wheel Game Module
+# Spin The Wheel - WordIT Game Template
 
-Game edukatif berbasis multiple-choice question dengan sistem spin untuk memilih pertanyaan random.
+## 🎮 Overview
+**Spin The Wheel** is a multiple-choice quiz game where questions are selected randomly via a "wheel spin" mechanic.
+- **Creator** provides a list of questions (universal question bank).
+- **Player** spins the wheel to get a random question, answers it, and earns points.
+- **Goal**: Score as high as possible in 5 rounds.
 
-## 📁 Struktur File
+## 🧱 Architecture
+This module follows strict WordIT architecture:
+- **GameTemplate Slug**: `spin-the-wheel`
+- **Prefix Path**: `/api/game/game-type/spin-the-wheel` (via `game-list` router)
+- **State**: Stateless. Progress is managed by FE or simple stateless endpoints.
+- **Database**: Uses default `Games` and `Leaderboard` tables. No custom tables.
 
-```
-spin-the-wheel/
-├── index.ts              # Export router
-├── spin.router.ts        # Router config
-├── spin.controller.ts    # Endpoint handlers
-├── question-bank.ts      # Hardcoded questions
-└── README.md            # Dokumentasi ini
-```
+## 🛠️ Data Structure (`game_json`)
+The `game_json` column in the `Games` table stores the configuration and question bank.
 
-## 🎮 Game Flow
-
-1. User masuk ke game tanpa login (tanpa auth)
-2. User memasukkan `displayName`
-3. User memilih `topic` (math, language, history, programming)
-4. User melakukan **5 spin** → setiap spin dapat 1 pertanyaan random
-5. User menjawab pertanyaan:
-   - **Benar** → +20 poin
-   - **Salah** → +0 poin
-6. Total maksimal: **100 poin** (5 pertanyaan × 20)
-7. Setelah selesai, frontend submit: `displayName`, `topic`, `score`, `timeSpent`
-8. User diarahkan ke **leaderboard**
-
-## 🔌 API Endpoints
-
-### Base URL
-```
-/api/game/game-type/spin-the-wheel
-```
-
-### 1. GET /topics
-Mendapatkan daftar topik yang tersedia.
-
-**Response:**
 ```json
 {
-  "success": true,
-  "statusCode": 200,
-  "message": "OK",
-  "data": {
-    "topics": ["math", "language", "history", "programming"]
-  }
-}
-```
-
-### 2. GET /question?topic=xxx
-Mendapatkan 1 pertanyaan random dari topik yang dipilih.
-
-**Query Params:**
-- `topic` (string, required): `math` | `language` | `history` | `programming`
-
-**Response:**
-```json
-{
-  "question": "7 × 8 = ?",
-  "options": ["54", "56", "58", "60"],
-  "answerIndex": 1
-}
-```
-
-### 3. POST /submit
-Submit skor ke leaderboard.
-
-**Body:**
-```json
-{
-  "displayName": "Hanif",
-  "topic": "math",
-  "score": 100,
-  "timeSpent": 42
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "statusCode": 201,
-  "message": "Submitted"
-}
-```
-
-### 4. GET /leaderboard?topic=xxx
-Mendapatkan leaderboard per topik.
-
-**Query Params:**
-- `topic` (string, required): `math` | `language` | `history` | `programming`
-
-**Response:**
-```json
-{
-  "leaderboard": [
-    { "displayName": "Rara", "score": 100, "timeSpent": 38 },
-    { "displayName": "Hanif", "score": 100, "timeSpent": 42 },
-    { "displayName": "Dimas", "score": 80, "timeSpent": 55 }
+  "totalRounds": 5,
+  "questions": [
+    {
+      "question": "What is 2 + 2?",
+      "options": ["3", "4", "5", "6"],
+      "answerIndex": 1
+    },
+    ...
   ]
 }
 ```
 
-**Sorting:**
-1. Score tertinggi (DESC)
-2. Jika score sama → Waktu tercepat (timeSpent ASC)
-3. Jika score & waktu sama → Created first (created_at ASC)
+## 🔌 API Endpoints
 
-## 💾 Database Schema
+### Creator Mode
+| Method | Endpoint | Description |
+|os|os|os|
+| **POST** | `/` | Create a new game instance. |
+| **GET** | `/:game_id` | Get game details (creator view). |
+| **PATCH** | `/:game_id` | Update game config/questions. |
+| **DELETE** | `/:game_id` | Delete game instance. |
 
-Model: `SpinTheWheelScore`
+**Auth**: Required (Creator only).
+**Body**: Uses `file_fields` for `thumbnail_image`.
 
-```prisma
-model SpinTheWheelScore {
-  id          Int      @id @default(autoincrement())
-  displayName String
-  topic       String
-  score       Int
-  timeSpent   Int      // dalam detik
-  created_at  DateTime @default(now())
-  
-  @@index([topic, score, timeSpent])
-}
-```
+### Player Mode
+| Method | Endpoint | Description |
+|os|os|os|
+| **GET** | `/:game_id/play/public` | Get public game info (sanitized). |
+| **GET** | `/:game_id/play/private` | Get full game info (creator only). |
+| **POST** | `/:game_id/play/spin` | Spin logic: Returns 1 random question. |
+| **POST** | `/:game_id/play/answer` | Validate answer. |
+| **POST** | `/:game_id/play/finish` | Submit final score to Leaderboard. |
+| **GET** | `/:game_id/leaderboard` | View top 20 scores. |
 
-## 📚 Question Bank
+**Auth**:
+- Public play: No auth required for `/spin` and `/answer`, Optional auth for `/finish` (guest vs user).
+- Private play: Auth required.
 
-Pertanyaan disimpan hardcoded di `question-bank.ts`:
+## 🕹️ Gameplay Flow
 
-- **Math**: 5 pertanyaan (matematika dasar)
-- **Language**: 5 pertanyaan (bahasa Indonesia & Inggris)
-- **History**: 5 pertanyaan (sejarah Indonesia & dunia)
-- **Programming**: 5 pertanyaan (coding basics)
+1. **Start**: User requests `/play/public`. Backend returns game metadata + `totalRounds`.
+2. **Round Loop (5x)**:
+   - **Spin**: FE calls `/play/spin`. Backend returns a random question (without `answerIndex`).
+   - **Answer**: User selects option. FE calls `/play/answer`. Backend verifies and returns `{ isCorrect: boolean, score: 20 }`.
+3. **Finish**: FE calculates total score (or tracks locally). FE calls `/play/finish` with final score/time. Backend saves to `Leaderboard`.
 
-Setiap topik memiliki minimal 5 pertanyaan untuk 5 kali spin.
-
-## 🧪 Testing
-
-Lihat file: `TESTING_SPIN_THE_WHEEL.md` di root project.
-
-## 📄 Dokumentasi API
-
-Lihat file: `APIDOG_SPIN_THE_WHEEL.md` di root project untuk format Apidog.
-
-## ⚙️ Konfigurasi
-
-Tidak ada konfigurasi khusus. Module ini:
-- ✅ Tidak memerlukan authentication
-- ✅ Tidak memerlukan file upload
-- ✅ Tidak memerlukan external API
-- ✅ Menggunakan database lokal PostgreSQL
-
-## 🔄 Future Improvements
-
-- [ ] Tambah lebih banyak pertanyaan per topik
-- [ ] Tambah topik baru (science, geography, dll)
-- [ ] Implementasi difficulty levels
-- [ ] Tambah timer per pertanyaan
-- [ ] Leaderboard global (all topics)
+## 🛡️ Validation
+- **Schema**: Zod schemas in `schema/spin-the-wheel.schema.ts`.
+- **Sanitization**: Public endpoints NEVER return `answerIndex`.

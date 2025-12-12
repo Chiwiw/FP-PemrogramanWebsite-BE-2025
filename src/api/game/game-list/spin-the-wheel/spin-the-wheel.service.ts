@@ -1,5 +1,3 @@
-/* eslint-disable unicorn/no-abusive-eslint-disable */
-/* eslint-disable */
 import { type Prisma, type ROLE } from '@prisma/client';
 import { StatusCodes } from 'http-status-codes';
 import { v4 } from 'uuid';
@@ -16,7 +14,7 @@ import {
   type ICreateSpinTheWheel,
   type IFinishSpin,
   type IUpdateSpinTheWheel,
-} from './schema/spin-the-wheel.schema';
+} from './schema';
 
 export abstract class SpinTheWheelService {
   // eslint-disable-next-line @typescript-eslint/naming-convention
@@ -30,12 +28,11 @@ export abstract class SpinTheWheelService {
 
     const thumbnailImagePath = await FileManager.upload(
       `game/spin-the-wheel/${newGameId}`,
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
       data.thumbnail_image,
     );
 
     const gameJson: ISpinTheWheelJson = {
-      totalRounds: typeof data.totalRounds === 'number' ? data.totalRounds : 5,
+      totalRounds: data.totalRounds,
       questions: data.questions as ISpinTheWheelQuestion[],
     };
 
@@ -141,16 +138,13 @@ export abstract class SpinTheWheelService {
     if (!gameJson)
       throw new ErrorResponse(StatusCodes.NOT_FOUND, 'Game data not found');
 
-    // Sanitization for Public endpoint
-    let questions = gameJson.questions;
+    const questions = gameJson.questions;
 
-    if (is_public) {
-      questions = questions.map(q => ({
-        question: q.question,
-        options: q.options,
-        answerIndex: -1, // HIDE IT
-      })) as ISpinTheWheelQuestion[];
-    }
+    // Sanitization: Remove answerIndex for public play
+    // But since the gameplay relies on /play/spin returning one question,
+    // this main endpoint might just return config like totalRounds.
+    // However, the user asked for "Get public play data" endpoint.
+    // Usually this is for initial load. We will hide questions answers if we return them.
 
     return {
       id: game.id,
@@ -158,14 +152,16 @@ export abstract class SpinTheWheelService {
       description: game.description,
       thumbnail_image: game.thumbnail_image,
       totalRounds: gameJson.totalRounds,
+      // We don't necessarily need to return all questions here if using /spin endpoint,
+      // but if we do, we MUST sanitize.
       questions: is_public
         ? questions.map(q => {
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          const { answerIndex, ...rest } = q;
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            const { answerIndex, ...rest } = q;
 
-          return rest;
-        })
-        : gameJson.questions,
+            return rest;
+          })
+        : questions,
       is_published: game.is_published,
     };
   }
@@ -200,16 +196,7 @@ export abstract class SpinTheWheelService {
       );
 
     if (data.name) {
-      const isNameExist = await prisma.games.findUnique({
-        where: { name: data.name },
-        select: { id: true },
-      });
-
-      if (isNameExist && isNameExist.id !== game_id)
-        throw new ErrorResponse(
-          StatusCodes.BAD_REQUEST,
-          'Game name is already used',
-        );
+      await this.existGameCheck(data.name, game_id);
     }
 
     const oldGameJson = game.game_json as unknown as ISpinTheWheelJson | null;
@@ -222,31 +209,18 @@ export abstract class SpinTheWheelService {
 
       thumbnailImagePath = await FileManager.upload(
         `game/spin-the-wheel/${game_id}`,
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
         data.thumbnail_image,
       );
-    }
-
-    // Handle flexible questions input
-    let newQuestions = oldGameJson?.questions ?? [];
-
-    if (data.questions) {
-      if (typeof data.questions === 'string') {
-        try {
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-          newQuestions = JSON.parse(data.questions);
-        } catch { } // eslint-disable-line no-empty
-      } else {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        newQuestions = data.questions;
-      }
     }
 
     const gameJson: ISpinTheWheelJson = {
       totalRounds: data.totalRounds
         ? Number(data.totalRounds)
         : (oldGameJson?.totalRounds ?? 5),
-      questions: newQuestions,
+      questions:
+        (data.questions as ISpinTheWheelQuestion[]) ??
+        oldGameJson?.questions ??
+        [],
     };
 
     const updatedGame = await prisma.games.update({
@@ -363,7 +337,7 @@ export abstract class SpinTheWheelService {
     await prisma.leaderboard.create({
       data: {
         game_id: gameId,
-        user_id: userId || null,
+        user_id: userId || null, // Allow null for guest
         score: data.totalScore,
         time_taken: data.totalTimeTaken,
       },
@@ -376,6 +350,7 @@ export abstract class SpinTheWheelService {
     const leaderboard = await prisma.leaderboard.findMany({
       where: { game_id },
       orderBy: [{ score: 'desc' }, { time_taken: 'asc' }],
+      take: 20,
       include: {
         user: {
           select: {
@@ -383,7 +358,6 @@ export abstract class SpinTheWheelService {
           },
         },
       },
-      take: 20,
     });
 
     return leaderboard;

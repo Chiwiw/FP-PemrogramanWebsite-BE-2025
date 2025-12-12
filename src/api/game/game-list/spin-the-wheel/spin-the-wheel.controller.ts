@@ -20,11 +20,9 @@ import {
   type IAnswerSpin,
   type ICreateSpinTheWheel,
   type IFinishSpin,
-  type IPlaySpin,
   type IUpdateSpinTheWheel,
-  PlaySpinSchema,
   UpdateSpinTheWheelSchema,
-} from './schema/spin-the-wheel.schema';
+} from './schema';
 import { SpinTheWheelService } from './spin-the-wheel.service';
 
 export const SpinTheWheelController = Router()
@@ -194,26 +192,26 @@ export const SpinTheWheelController = Router()
       }
     },
   )
+  // --- SPINN THE WHEEL GAMEPLAY ---
   .post(
     '/:game_id/play/spin',
-    validateBody({ schema: PlaySpinSchema }),
     async (
-      request: Request<{ game_id: string }, {}, IPlaySpin>,
+      request: Request<{ game_id: string }>,
       response: Response,
       next: NextFunction,
     ) => {
       try {
-        const resultData = await SpinTheWheelService.spin(
-          request.params.game_id,
-        );
+        const result = await SpinTheWheelService.spin(request.params.game_id);
 
-        const result = new SuccessResponse(
+        const successResponse = new SuccessResponse(
           StatusCodes.OK,
           'Spin successful',
-          resultData,
+          result,
         );
 
-        return response.status(result.statusCode).json(result.json());
+        return response
+          .status(successResponse.statusCode)
+          .json(successResponse.json());
       } catch (error) {
         return next(error);
       }
@@ -228,19 +226,21 @@ export const SpinTheWheelController = Router()
       next: NextFunction,
     ) => {
       try {
-        const resultData = await SpinTheWheelService.checkAnswer(
+        const result = await SpinTheWheelService.checkAnswer(
           request.params.game_id,
           request.body.questionIndex,
           request.body.answerIndex,
         );
 
-        const result = new SuccessResponse(
+        const successResponse = new SuccessResponse(
           StatusCodes.OK,
-          'Answer checked',
-          resultData,
+          'Answer submitted',
+          result,
         );
 
-        return response.status(result.statusCode).json(result.json());
+        return response
+          .status(successResponse.statusCode)
+          .json(successResponse.json());
       } catch (error) {
         return next(error);
       }
@@ -256,21 +256,21 @@ export const SpinTheWheelController = Router()
       next: NextFunction,
     ) => {
       try {
-        const userId = request.user?.user_id || null;
-
-        const resultData = await SpinTheWheelService.finishGame(
+        const result = await SpinTheWheelService.finishGame(
           request.params.game_id,
           request.body,
-          userId,
+          request.user?.user_id,
         );
 
-        const result = new SuccessResponse(
+        const successResponse = new SuccessResponse(
           StatusCodes.OK,
           'Game finished',
-          resultData,
+          result,
         );
 
-        return response.status(result.statusCode).json(result.json());
+        return response
+          .status(successResponse.statusCode)
+          .json(successResponse.json());
       } catch (error) {
         return next(error);
       }
@@ -284,17 +284,19 @@ export const SpinTheWheelController = Router()
       next: NextFunction,
     ) => {
       try {
-        const resultData = await SpinTheWheelService.getLeaderboard(
+        const result = await SpinTheWheelService.getLeaderboard(
           request.params.game_id,
         );
 
-        const result = new SuccessResponse(
+        const successResponse = new SuccessResponse(
           StatusCodes.OK,
-          'Get leaderboard successfully',
-          resultData,
+          'Leaderboard retrieved successfully',
+          result,
         );
 
-        return response.status(result.statusCode).json(result.json());
+        return response
+          .status(successResponse.statusCode)
+          .json(successResponse.json());
       } catch (error) {
         return next(error);
       }
