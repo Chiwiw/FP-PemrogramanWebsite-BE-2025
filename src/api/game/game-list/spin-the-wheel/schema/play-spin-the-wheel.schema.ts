@@ -12,7 +12,6 @@ export const AnswerSpinSchema = z.object({
 export const FinishSpinSchema = z.object({
   totalScore: z.number().int().min(0),
   totalTimeTaken: z.number().min(0),
-  userId: z.string().optional().nullable(),
 });
 
 export type IPlaySpin = z.infer<typeof PlaySpinSchema>;

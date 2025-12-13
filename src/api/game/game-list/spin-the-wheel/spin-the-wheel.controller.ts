@@ -192,7 +192,7 @@ export const SpinTheWheelController = Router()
       }
     },
   )
-  // --- SPINN THE WHEEL GAMEPLAY ---
+  // --- SPIN THE WHEEL GAMEPLAY ---
   .post(
     '/:game_id/play/spin',
     async (

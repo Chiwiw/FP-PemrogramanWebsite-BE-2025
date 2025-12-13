@@ -19,6 +19,7 @@ import {
 export abstract class SpinTheWheelService {
   // eslint-disable-next-line @typescript-eslint/naming-convention
   private static GAME_SLUG = 'spin-the-wheel';
+  private static readonly scorePerQuestion = 20;
 
   static async createGame(data: ICreateSpinTheWheel, user_id: string) {
     await this.existGameCheck(data.name);
@@ -140,20 +141,12 @@ export abstract class SpinTheWheelService {
 
     const questions = gameJson.questions;
 
-    // Sanitization: Remove answerIndex for public play
-    // But since the gameplay relies on /play/spin returning one question,
-    // this main endpoint might just return config like totalRounds.
-    // However, the user asked for "Get public play data" endpoint.
-    // Usually this is for initial load. We will hide questions answers if we return them.
-
     return {
       id: game.id,
       name: game.name,
       description: game.description,
       thumbnail_image: game.thumbnail_image,
       totalRounds: gameJson.totalRounds,
-      // We don't necessarily need to return all questions here if using /spin endpoint,
-      // but if we do, we MUST sanitize.
       questions: is_public
         ? questions.map(q => {
             // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -274,9 +267,19 @@ export abstract class SpinTheWheelService {
   static async spin(gameId: string) {
     const game = await prisma.games.findUnique({
       where: { id: gameId },
+      select: {
+        game_json: true,
+        game_template: { select: { slug: true } },
+      },
     });
 
     if (!game) throw new ErrorResponse(StatusCodes.NOT_FOUND, 'Game not found');
+    if (game.game_template.slug !== this.GAME_SLUG)
+      throw new ErrorResponse(
+        StatusCodes.BAD_REQUEST,
+        'Game is not a spin-the-wheel game',
+      );
+
     const gameJson = game.game_json as unknown as ISpinTheWheelJson;
 
     const questions = gameJson.questions;
@@ -302,9 +305,19 @@ export abstract class SpinTheWheelService {
   ) {
     const game = await prisma.games.findUnique({
       where: { id: gameId },
+      select: {
+        game_json: true,
+        game_template: { select: { slug: true } },
+      },
     });
 
     if (!game) throw new ErrorResponse(StatusCodes.NOT_FOUND, 'Game not found');
+    if (game.game_template.slug !== this.GAME_SLUG)
+      throw new ErrorResponse(
+        StatusCodes.BAD_REQUEST,
+        'Game is not a spin-the-wheel game',
+      );
+
     const gameJson = game.game_json as unknown as ISpinTheWheelJson;
     const question = gameJson.questions[questionIndex];
 
@@ -315,7 +328,7 @@ export abstract class SpinTheWheelService {
       );
 
     const isCorrect = question.answerIndex === answerIndex;
-    const score = isCorrect ? 20 : 0;
+    const score = isCorrect ? this.scorePerQuestion : 0;
 
     return {
       isCorrect,
@@ -329,9 +342,20 @@ export abstract class SpinTheWheelService {
     data: IFinishSpin,
     userId?: string | null,
   ) {
-    // Validate game exists
-    const game = await prisma.games.findUnique({ where: { id: gameId } });
+    // Validate game exists and type
+    const game = await prisma.games.findUnique({
+      where: { id: gameId },
+      select: {
+        id: true,
+        game_template: { select: { slug: true } },
+      },
+    });
     if (!game) throw new ErrorResponse(StatusCodes.NOT_FOUND, 'Game not found');
+    if (game.game_template.slug !== this.GAME_SLUG)
+      throw new ErrorResponse(
+        StatusCodes.BAD_REQUEST,
+        'Game is not a spin-the-wheel game',
+      );
 
     // Create leaderboard entry
     await prisma.leaderboard.create({
@@ -347,10 +371,17 @@ export abstract class SpinTheWheelService {
   }
 
   static async getLeaderboard(game_id: string) {
+    const game = await prisma.games.findUnique({
+      where: { id: game_id },
+      select: { id: true },
+    });
+
+    if (!game) throw new ErrorResponse(StatusCodes.NOT_FOUND, 'Game not found');
+
     const leaderboard = await prisma.leaderboard.findMany({
       where: { game_id },
       orderBy: [{ score: 'desc' }, { time_taken: 'asc' }],
-      take: 20,
+      take: 10,
       include: {
         user: {
           select: {
@@ -360,13 +391,23 @@ export abstract class SpinTheWheelService {
       },
     });
 
-    return leaderboard;
+    return leaderboard.map((entry, index) => ({
+      rank: index + 1,
+      username: entry.user?.username || 'Anonymous',
+      score: entry.score,
+      time_taken: entry.time_taken,
+      created_at: entry.created_at,
+    }));
   }
 
   private static async existGameCheck(game_name?: string, game_id?: string) {
-    const where: Record<string, unknown> = {};
-    if (game_name) where.name = game_name;
-    if (game_id) where.id = game_id;
+    const where: Prisma.GamesWhereInput = {
+      name: game_name,
+    };
+
+    if (game_id) {
+      where.id = { not: game_id };
+    }
 
     if (Object.keys(where).length === 0) return null;
 
@@ -378,7 +419,7 @@ export abstract class SpinTheWheelService {
     if (game)
       throw new ErrorResponse(
         StatusCodes.BAD_REQUEST,
-        'Game name is already exist',
+        'Game name already exists',
       );
 
     return game;
